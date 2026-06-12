@@ -55,6 +55,22 @@ git fetch claude-rules main
 git subtree pull --prefix=.claude/rules claude-rules main --squash
 ```
 
+**Linear-history hosts:** `git subtree` creates merge commits, which rebase-based PR
+completion (e.g. Azure DevOps semi-linear / rebase-and-fast-forward) cannot replay —
+the squashed root commit lands at the repo root. If your target branch only accepts
+rebased PRs, vendor with a plain snapshot commit instead, keeping subtree-compatible
+provenance trailers:
+
+```bash
+git fetch claude-rules main
+SPLIT=$(git rev-parse FETCH_HEAD)
+git rm -rq .claude/rules 2>/dev/null || true
+git read-tree --prefix=.claude/rules -u FETCH_HEAD
+git commit -m "chore(rules): vendor claude-rules at ${SPLIT:0:9}" \
+  -m "git-subtree-dir: .claude/rules" \
+  -m "git-subtree-split: ${SPLIT}"
+```
+
 Rules of the road:
 
 - `.claude/rules/` is **upstream-owned — never hand-edit it** in a consuming repo.
