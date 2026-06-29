@@ -33,6 +33,28 @@ injects them at every session start. For verification, staying current, and the
 optional `.claude/canon.txt` manifest, see [Consuming via the plugin
 marketplace](#consuming-via-the-plugin-marketplace) below.
 
+### Install in any environment (scriptable)
+
+The slash commands above are interactive. To install canon **non-interactively** —
+in dotfiles, a setup script, CI, or a fresh container/machine — use the CLI
+equivalents:
+
+```bash
+claude plugin marketplace add rinman24/canon --scope user
+claude plugin install canon-core@canon --scope user
+```
+
+This clones the marketplace (canon is public — no auth needed) and installs and
+enables `canon-core` for every project on the machine. It is safe to re-run: it
+no-ops once installed, so it belongs in your shell rc / dotfiles to make new
+environments self-provision.
+
+A committed `.claude/settings.json` that *declares* the marketplace does **not**
+auto-install the plugin — each environment needs this one-time activation. That is
+a deliberate security boundary: a repo you check out cannot silently make your
+machine fetch and run code. Restart Claude Code afterward, because the
+`SessionStart` hook only registers at process startup (not on `/clear`).
+
 ## Tiers
 
 | Tier | Lives in | Content |
@@ -100,27 +122,43 @@ plugin ships only the portable principles.
 
 ### Verifying the install
 
-After installing, open Claude Code in any project and confirm the hook fired:
-look for the injected context block titled `# Engineering rules (injected by
-canon-core)` — check it via `/context`, or just ask "what engineering rules
-are loaded?". For a deeper look, `claude --debug` shows the `SessionStart` hook
-registering and running `verify-and-inject.sh`.
+After installing (and **restarting** Claude Code), confirm the hook fired. Note
+that `/context` does **not** itemize `SessionStart`-injected content, so an
+empty-looking `/context` is not a failure. Verify by either:
 
-### Staying current
+- **Functionally** — ask "what engineering rules are loaded?"; the answer should
+  draw on canon modules (e.g. the `git-semilinear` rule: rebase before merge, no
+  WIP commits) rather than just project-local facts.
+- **Hook output / debug** — `claude --debug` shows the `SessionStart` hook
+  registering and running `verify-and-inject.sh`; the injected block is titled
+  `# Engineering rules (injected by canon-core)`.
 
-`canon-core` declares no `version` (in neither `plugin.json` nor the
-marketplace entry), so its version resolves to the **git commit SHA** of the
-default branch. Every push to `main` is therefore a new version — maintainers
-never bump a number, and consumers can always reach the latest rules.
+### Versioning & staying current
 
-How a consumer gets those updates:
+`canon-core` declares a semantic `version` in `plugin.json`, and each release is
+a matching git tag (`vX.Y.Z`) on `main`. Consumers pin to a tag via the
+marketplace `ref` so the injected rules never drift between environments:
 
-- **Automatic (recommended).** Enable auto-update for the marketplace —
-  `/plugin` → Marketplaces → select `canon` → "Enable auto-update". Claude
-  Code then refreshes the marketplace and pulls the newest commit at startup,
-  and prompts `/reload-plugins` to activate it. (Third-party marketplaces have
-  auto-update **off** by default, so this is opt-in per consumer.)
-- **Manual.** Run `/plugin marketplace update canon`, then `/reload-plugins`.
+```json
+// .claude/settings.json (per-repo, shared with teammates) — or ~/.claude/settings.json (per-machine)
+"extraKnownMarketplaces": {
+  "canon": {
+    "source": { "source": "github", "repo": "rinman24/canon", "ref": "v1.0.0" },
+    "autoUpdate": false
+  }
+}
+```
+
+How a consumer takes an update:
+
+- **Manual.** Bump the pinned `ref` to the new tag, then
+  `/plugin marketplace update canon` and `/reload-plugins` (or restart).
+- **Automated (recommended).** A dependency bot — e.g. Renovate's `github-tags`
+  manager watching `rinman24/canon` — opens a PR raising the pinned `ref` when a
+  new tag ships; review and merge to adopt it.
+
+Leaving `autoUpdate: false` (the default for third-party marketplaces) keeps every
+environment on the pinned tag until you deliberately move it.
 
 ## Consuming via git subtree
 
